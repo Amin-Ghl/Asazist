@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View, TouchableOpacity, Image, Linking } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { COLORS } from "../constants/Colors";
+import { useTheme } from "../contexts/ThemeContext";
 
 interface UserProfileCardProps {
   userName?: string;
@@ -17,33 +17,35 @@ export default function UserProfileCard({
   catches = 12,
   efficiency = 85
 }: UserProfileCardProps) {
+  const { theme } = useTheme();
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.card, shadowColor: theme.shadowColor }]}>
       <View style={styles.profileSection}>
         <Image 
           source={{ uri: "https://randomuser.me/api/portraits/men/32.jpg" }} 
-          style={styles.profileImage} 
+          style={[styles.profileImage, { borderColor: theme.primary }]} 
         />
         <View style={styles.profileInfo}>
-          <Text style={styles.userName}>{userName}</Text>
-          <Text style={styles.userEmail}>{userEmail}</Text>
+          <Text style={[styles.userName, { color: theme.text }]}>{userName}</Text>
+          <Text style={[styles.userEmail, { color: theme.secondaryText }]}>{userEmail}</Text>
         </View>
       </View>
 
       <View style={styles.statsContainer}>
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>{activeTraps}</Text>
-          <Text style={styles.statLabel}>Active Traps</Text>
+          <Text style={[styles.statValue, { color: theme.text }]}>{activeTraps}</Text>
+          <Text style={[styles.statLabel, { color: theme.secondaryText }]}>Active Traps</Text>
         </View>
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: theme.border }]} />
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>{catches}</Text>
-          <Text style={styles.statLabel}>Catches</Text>
+          <Text style={[styles.statValue, { color: theme.text }]}>{catches}</Text>
+          <Text style={[styles.statLabel, { color: theme.secondaryText }]}>Catches</Text>
         </View>
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: theme.border }]} />
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>{efficiency}%</Text>
-          <Text style={styles.statLabel}>Efficiency</Text>
+          <Text style={[styles.statValue, { color: theme.text }]}>{efficiency}%</Text>
+          <Text style={[styles.statLabel, { color: theme.secondaryText }]}>Efficiency</Text>
         </View>
       </View>
 
@@ -51,8 +53,8 @@ export default function UserProfileCard({
         style={styles.viewProfileButton}
         onPress={() => Linking.openURL('https://asazist.com/login-register')}
       >
-        <Text style={styles.viewProfileText}>View Profile</Text>
-        <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
+        <Text style={[styles.viewProfileText, { color: theme.primary }]}>View Profile</Text>
+        <Ionicons name="chevron-forward" size={16} color={theme.primary} />
       </TouchableOpacity>
     </View>
   );
@@ -60,11 +62,9 @@ export default function UserProfileCard({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: COLORS.white,
     borderRadius: 10,
     padding: 16,
     marginBottom: 16,
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3,
@@ -80,7 +80,6 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 30,
     borderWidth: 2,
-    borderColor: COLORS.primary,
   },
   profileInfo: {
     marginLeft: 16,
@@ -88,20 +87,15 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 18,
     fontWeight: "bold",
-    color: COLORS.text,
   },
   userEmail: {
     fontSize: 14,
-    color: COLORS.secondary,
     marginTop: 4,
   },
   statsContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: COLORS.lightGray,
+    alignItems: "center",
     marginBottom: 16,
   },
   statItem: {
@@ -109,27 +103,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   statValue: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "bold",
-    color: COLORS.primary,
   },
   statLabel: {
     fontSize: 12,
-    color: COLORS.text,
     marginTop: 4,
   },
   divider: {
     width: 1,
-    backgroundColor: COLORS.lightGray,
+    height: 40,
   },
   viewProfileButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    paddingVertical: 8,
   },
   viewProfileText: {
     fontSize: 14,
-    color: COLORS.primary,
     fontWeight: "500",
     marginRight: 4,
   },

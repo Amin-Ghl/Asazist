@@ -15,31 +15,25 @@ interface SettingItemProps {
   onSwitchChange?: (value: boolean) => void;
 }
 
-export default function SettingsScreen() {
-  const { themeMode, setThemeMode, isDarkMode, theme } = useTheme();
-  const [notifications, setNotifications] = useState(true);
-  const [locationServices, setLocationServices] = useState(true);
-
-  const handleThemeChange = (value: boolean) => {
-    setThemeMode(value ? 'dark' : 'light');
-  };
-
-  const SettingItem = ({ 
-    title, 
-    description, 
-    icon, 
-    onPress = () => {}, 
-    showSwitch = false, 
-    switchValue = false, 
-    onSwitchChange = () => {} 
-  }: SettingItemProps) => (
+const SettingItem = ({ 
+  title, 
+  description, 
+  icon, 
+  onPress = () => {}, 
+  showSwitch = false, 
+  switchValue = false, 
+  onSwitchChange = () => {} 
+}: SettingItemProps) => {
+  const { theme } = useTheme();
+  
+  return (
     <View style={styles.settingItem}>
       <View style={styles.settingIcon}>
         <Ionicons name={icon as any} size={24} color={theme.primary} />
       </View>
       <View style={styles.settingContent}>
-        <Text style={styles.settingTitle}>{title}</Text>
-        <Text style={styles.settingDescription}>{description}</Text>
+        <Text style={[styles.settingTitle, { color: theme.text }]}>{title}</Text>
+        <Text style={[styles.settingDescription, { color: theme.secondaryText }]}>{description}</Text>
       </View>
       {showSwitch ? (
         <Switch
@@ -52,11 +46,35 @@ export default function SettingsScreen() {
       )}
     </View>
   );
+};
+
+export default function SettingsScreen() {
+  const { themeMode, setThemeMode, isDarkMode, theme } = useTheme();
+  const [notifications, setNotifications] = useState(true);
+  const [locationServices, setLocationServices] = useState(true);
+
+  const handleThemeChange = (value: boolean) => {
+    setThemeMode(value ? 'dark' : 'light');
+  };
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={[styles.section, { backgroundColor: theme.cardBackground }]}>
-        <Text style={[styles.sectionTitle, { color: theme.secondaryText }]}>Preferences</Text>
+      <View style={[styles.section, { 
+        backgroundColor: 'rgba(0, 100, 255, 0.05)',
+        shadowColor: '#0064FF',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.2,
+        shadowRadius: 20,
+        elevation: 5,
+        borderWidth: 1,
+        borderColor: 'rgba(0, 100, 255, 0.1)',
+      }]}>
+        <Text style={[styles.sectionTitle, { 
+          color: theme.text,
+          textShadowColor: 'rgba(0, 100, 255, 0.3)',
+          textShadowOffset: { width: 0, height: 0 },
+          textShadowRadius: 10,
+        }]}>Preferences</Text>
         <SettingItem
           title="Notifications"
           description="Receive alerts about trap activity"
@@ -83,8 +101,22 @@ export default function SettingsScreen() {
         />
       </View>
 
-      <View style={[styles.section, { backgroundColor: theme.cardBackground }]}>
-        <Text style={[styles.sectionTitle, { color: theme.secondaryText }]}>Account</Text>
+      <View style={[styles.section, { 
+        backgroundColor: 'rgba(0, 100, 255, 0.05)',
+        shadowColor: '#0064FF',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.2,
+        shadowRadius: 20,
+        elevation: 5,
+        borderWidth: 1,
+        borderColor: 'rgba(0, 100, 255, 0.1)',
+      }]}>
+        <Text style={[styles.sectionTitle, { 
+          color: theme.text,
+          textShadowColor: 'rgba(0, 100, 255, 0.3)',
+          textShadowOffset: { width: 0, height: 0 },
+          textShadowRadius: 10,
+        }]}>Account</Text>
         <SettingItem
           title="Profile"
           description="Manage your account information"
@@ -99,8 +131,22 @@ export default function SettingsScreen() {
         />
       </View>
 
-      <View style={[styles.section, { backgroundColor: theme.cardBackground }]}>
-        <Text style={[styles.sectionTitle, { color: theme.secondaryText }]}>Support</Text>
+      <View style={[styles.section, { 
+        backgroundColor: 'rgba(0, 100, 255, 0.05)',
+        shadowColor: '#0064FF',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.2,
+        shadowRadius: 20,
+        elevation: 5,
+        borderWidth: 1,
+        borderColor: 'rgba(0, 100, 255, 0.1)',
+      }]}>
+        <Text style={[styles.sectionTitle, { 
+          color: theme.text,
+          textShadowColor: 'rgba(0, 100, 255, 0.3)',
+          textShadowOffset: { width: 0, height: 0 },
+          textShadowRadius: 10,
+        }]}>Support</Text>
         <SettingItem
           title="Help Center"
           description="Get help with the app"
@@ -121,25 +167,27 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    padding: 20,
   },
   section: {
     marginBottom: 24,
-    borderRadius: 10,
+    borderRadius: 20,
     marginHorizontal: 16,
     marginTop: 16,
-    padding: 8,
+    padding: 16,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
     marginLeft: 16,
-    marginBottom: 8,
+    marginBottom: 16,
   },
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 100, 255, 0.1)',
   },
   settingIcon: {
     width: 40,
@@ -148,13 +196,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
+    backgroundColor: 'rgba(0, 100, 255, 0.1)',
   },
   settingContent: {
     flex: 1,
   },
   settingTitle: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   settingDescription: {
     fontSize: 14,
