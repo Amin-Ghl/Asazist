@@ -217,17 +217,17 @@ export default function TrapsScreen() {
             <View style={styles.readingsGrid}>
               <View style={styles.readingCard}>
                 <Ionicons name="thermometer" size={24} color={theme.primary} />
-                <Text style={styles.readingValue}>{lastReading.calibrated_temperature.toFixed(1)}°C</Text>
+                <Text style={styles.readingValue}>{lastReading.calibrated_temperature?.toFixed(1) ?? 'N/A'}°C</Text>
                 <Text style={styles.readingLabel}>Temperature</Text>
               </View>
               <View style={styles.readingCard}>
                 <Ionicons name="water" size={24} color={theme.primary} />
-                <Text style={styles.readingValue}>{lastReading.calibrated_humidity.toFixed(1)}%</Text>
+                <Text style={styles.readingValue}>{lastReading.calibrated_humidity?.toFixed(1) ?? 'N/A'}%</Text>
                 <Text style={styles.readingLabel}>Humidity</Text>
               </View>
               <View style={styles.readingCard}>
                 <Ionicons name="scale" size={24} color={theme.primary} />
-                <Text style={styles.readingValue}>{lastReading.mouse_weight.toFixed(1)}g</Text>
+                <Text style={styles.readingValue}>{lastReading.mouse_weight?.toFixed(1) ?? 'N/A'}g</Text>
                 <Text style={styles.readingLabel}>Weight</Text>
               </View>
             </View>
