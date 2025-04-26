@@ -11,10 +11,12 @@ import { API_CONFIG } from '../../constants/config';
 
 interface SensorReading {
   id: number;
-  station_id: string;
+  station_id: number;
   mouse_weight: number;
-  temperature: number;
-  humidity: number;
+  raw_temperature: number;
+  raw_humidity: number;
+  calibrated_temperature: number;
+  calibrated_humidity: number;
   mouse_present: number;
   bait1_touched: number;
   bait2_touched: number;
@@ -22,16 +24,16 @@ interface SensorReading {
 }
 
 interface Station {
-  station_id: string;
-  group_id: string;
+  station_id: number;
+  group_id: number;
   global_station_number: number;
   group_station_number: number;
-  name?: string;
+  station_name: string;
   last_reading?: SensorReading;
 }
 
 interface Group {
-  id: string;
+  id: number;
   name: string;
   tag: string;
   stations: Station[];
@@ -72,7 +74,7 @@ export default function TrapsScreen() {
       }
 
       // Create a map of station_id to latest reading
-      const latestReadings = new Map<string, SensorReading>();
+      const latestReadings = new Map<number, SensorReading>();
       data.data.sensor_readings.forEach((reading: SensorReading) => {
         const currentLatest = latestReadings.get(reading.station_id);
         if (!currentLatest || new Date(reading.timestamp) > new Date(currentLatest.timestamp)) {
@@ -82,7 +84,7 @@ export default function TrapsScreen() {
 
       // Transform API data into our group structure
       const transformedGroups: Group[] = [];
-      const stationsMap = new Map<string, Station[]>();
+      const stationsMap = new Map<number, Station[]>();
 
       // Group stations by their group_id
       data.data.stations.forEach((station: Station) => {
@@ -100,12 +102,12 @@ export default function TrapsScreen() {
         transformedGroups.push({
           id: groupId,
           name: `Group ${groupId}`,
-          tag: groupId,
+          tag: groupId.toString(),
           stations: stations.sort((a, b) => a.group_station_number - b.group_station_number)
         });
       });
 
-      setGroups(transformedGroups.sort((a, b) => a.id.localeCompare(b.id)));
+      setGroups(transformedGroups.sort((a, b) => a.id - b.id));
     } catch (err) {
       console.error('Error fetching data:', err);
       setError(err instanceof Error ? err.message : 'An error occurred while fetching data');
@@ -164,7 +166,7 @@ export default function TrapsScreen() {
 
   const handleStationPress = (station: Station) => {
     setSelectedStation(station);
-    setStationName(station.name || `Station ${station.global_station_number}`);
+    setStationName(station.station_name);
     setIsModalVisible(true);
   };
 
@@ -174,7 +176,7 @@ export default function TrapsScreen() {
         ...selectedGroup,
         stations: selectedGroup.stations.map(s => 
           s.station_id === selectedStation.station_id 
-            ? { ...s, name: stationName }
+            ? { ...s, station_name: stationName }
             : s
         ),
       };
@@ -215,17 +217,17 @@ export default function TrapsScreen() {
             <View style={styles.readingsGrid}>
               <View style={styles.readingCard}>
                 <Ionicons name="thermometer" size={24} color={theme.primary} />
-                <Text style={styles.readingValue}>{lastReading.temperature}°C</Text>
+                <Text style={styles.readingValue}>{lastReading.calibrated_temperature.toFixed(1)}°C</Text>
                 <Text style={styles.readingLabel}>Temperature</Text>
               </View>
               <View style={styles.readingCard}>
                 <Ionicons name="water" size={24} color={theme.primary} />
-                <Text style={styles.readingValue}>{lastReading.humidity}%</Text>
+                <Text style={styles.readingValue}>{lastReading.calibrated_humidity.toFixed(1)}%</Text>
                 <Text style={styles.readingLabel}>Humidity</Text>
               </View>
               <View style={styles.readingCard}>
                 <Ionicons name="scale" size={24} color={theme.primary} />
-                <Text style={styles.readingValue}>{lastReading.mouse_weight}g</Text>
+                <Text style={styles.readingValue}>{lastReading.mouse_weight.toFixed(1)}g</Text>
                 <Text style={styles.readingLabel}>Weight</Text>
               </View>
             </View>
@@ -304,9 +306,9 @@ export default function TrapsScreen() {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.headerContainer}>
-        <UserProfileCard 
-          userName="Reza Saber"
-          userEmail="rexa.saber1358@gmail.com"
+      <UserProfileCard 
+        userName="Reza Saber"
+        userEmail="rexa.saber1358@gmail.com"
           activeTraps={groups.reduce((sum, group) => sum + group.stations.length, 0)}
           catches={0}
           efficiency={0}
@@ -315,35 +317,35 @@ export default function TrapsScreen() {
       
       <View style={styles.groupsContainer}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Groups</Text>
+        <Text style={styles.sectionTitle}>Groups</Text>
           <Text style={styles.sectionSubtitle}>{groups.length} groups • {groups.reduce((sum, group) => sum + group.stations.length, 0)} stations</Text>
         </View>
         <View style={styles.gridContainer}>
-          {groups.map((group) => (
-            <TouchableOpacity
-              key={group.id} 
-              style={styles.groupCard}
-              onPress={() => handleGroupPress(group)}
-            >
-              <View style={styles.groupInfo}>
+        {groups.map((group) => (
+          <TouchableOpacity
+            key={group.id}
+            style={styles.groupCard}
+            onPress={() => handleGroupPress(group)}
+          >
+            <View style={styles.groupInfo}>
                 <View style={styles.groupHeader}>
                   <View style={styles.groupTitleContainer}>
-                    <View style={styles.tagContainer}>
-                      <Text style={styles.groupTag}>{group.tag}</Text>
-                    </View>
-                    <TouchableOpacity
+                <View style={styles.tagContainer}>
+                  <Text style={styles.groupTag}>{group.tag}</Text>
+                </View>
+                <TouchableOpacity 
                       onPress={(e) => handleGroupNamePress(group, e)}
                     >
                       <Text style={styles.groupName} numberOfLines={1}>{group.name}</Text>
-                    </TouchableOpacity>
-                  </View>
+                </TouchableOpacity>
+              </View>
                 </View>
                 
                 <View style={styles.stationSummary}>
                   <View style={styles.stationCountContainer}>
                     <Ionicons name="location" size={16} color={theme.primary} />
-                    <Text style={styles.stationCount}>{group.stations.length} stations</Text>
-                  </View>
+              <Text style={styles.stationCount}>{group.stations.length} stations</Text>
+            </View>
                   <View style={styles.statusContainer}>
                     {group.stations.map((station, index) => {
                       if (index >= 3) return null;
@@ -363,8 +365,8 @@ export default function TrapsScreen() {
                   </View>
                 </View>
               </View>
-            </TouchableOpacity>
-          ))}
+          </TouchableOpacity>
+        ))}
         </View>
       </View>
 
@@ -474,6 +476,51 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     elevation: 5,
     borderWidth: 1,
     borderColor: 'rgba(0, 100, 255, 0.1)',
+  },
+  headerContent: {
+    flexDirection: 'column',
+    gap: 16,
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: theme.text,
+    textShadowColor: 'rgba(0, 100, 255, 0.2)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  infoButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: theme.background,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.background,
+    borderRadius: 12,
+    padding: 12,
+    gap: 12,
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: theme.text,
+  },
+  statDivider: {
+    width: 1,
+    height: '100%',
+    backgroundColor: theme.border,
   },
   groupsContainer: {
     marginTop: 24,

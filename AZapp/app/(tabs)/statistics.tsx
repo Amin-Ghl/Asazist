@@ -4,8 +4,19 @@ import { Text } from '../../components/Themed';
 import { getDatabaseData } from '../../api/database';
 import { API_CONFIG } from '../../constants/config';
 
+interface ModelOutput {
+  station_id: string;
+  timestamp: string;
+  food_recommendation: string;
+  mouse_probability: number;
+}
+
+interface DatabaseData {
+  model_outputs: ModelOutput[];
+}
+
 export default function StatisticsScreen() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<DatabaseData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -15,7 +26,11 @@ export default function StatisticsScreen() {
       setIsLoading(true);
       setError(null);
       const result = await getDatabaseData();
-      setData(result);
+      if (result?.data) {
+        setData({ model_outputs: result.data.model_outputs || [] });
+      } else {
+        throw new Error('No data received from server');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
       console.error('Error fetching data:', err);
@@ -102,34 +117,36 @@ export default function StatisticsScreen() {
         </TouchableOpacity>
       </View>
 
-      {data?.stations && (
+      {data?.model_outputs && data.model_outputs.length > 0 ? (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Stations</Text>
-          {data.stations.map((station: any) => (
-            <View key={station.station_id} style={styles.stationItem}>
-              <Text>ID: {station.station_id}</Text>
-              <Text>Group: {station.group_id}</Text>
-              <Text>Global Number: {station.global_number}</Text>
+          <Text style={styles.sectionTitle}>Model Predictions ({data.model_outputs.length})</Text>
+          {data.model_outputs.map((output, index) => (
+            <View key={index} style={styles.modelItem}>
+              <Text style={styles.itemTitle}>Station: {output.station_id}</Text>
+              <Text>Time: {new Date(output.timestamp).toLocaleString()}</Text>
+              
+              <View style={styles.modelData}>
+                <View style={styles.modelColumn}>
+                  <Text style={styles.modelLabel}>Food Recommendation:</Text>
+                  <Text style={styles.foodRecommendation}>
+                    {output.food_recommendation || 'No recommendation'}
+                  </Text>
+                </View>
+                
+                <View style={styles.modelColumn}>
+                  <Text style={styles.modelLabel}>Mouse Probability:</Text>
+                  <Text style={styles.probabilityText}>
+                    {((output.mouse_probability ?? 0) * 100).toFixed(1)}%
+                  </Text>
+                </View>
+              </View>
             </View>
           ))}
         </View>
-      )}
-
-      {data?.sensor_readings && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Sensor Readings</Text>
-          {data.sensor_readings.map((reading: any, index: number) => (
-            <View key={index} style={styles.readingItem}>
-              <Text>Station: {reading.station_id}</Text>
-              <Text>Timestamp: {new Date(reading.timestamp).toLocaleString()}</Text>
-              <Text>Mouse Weight: {reading.mouse_weight} g</Text>
-              <Text>Temperature: {reading.temperature}°C</Text>
-              <Text>Humidity: {reading.humidity}%</Text>
-              <Text>Mouse Present: {reading.mouse_present ? 'Yes' : 'No'}</Text>
-              <Text>Bait 1 Touched: {reading.bait1_touched ? 'Yes' : 'No'}</Text>
-              <Text>Bait 2 Touched: {reading.bait2_touched ? 'Yes' : 'No'}</Text>
-            </View>
-          ))}
+      ) : (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>No model predictions available</Text>
+          <Text style={styles.emptyStateSubtext}>Try refreshing or check your connection</Text>
         </View>
       )}
     </ScrollView>
@@ -173,20 +190,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 10,
   },
-  stationItem: {
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 5,
-    marginBottom: 10,
-  },
-  readingItem: {
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 5,
-    marginBottom: 10,
-  },
   errorText: {
     color: 'red',
     marginBottom: 10,
@@ -199,6 +202,53 @@ const styles = StyleSheet.create({
   },
   retryButtonText: {
     color: 'white',
+    textAlign: 'center',
+  },
+  itemTitle: {
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginBottom: 5,
+  },
+  modelItem: {
+    padding: 15,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 5,
+    marginBottom: 10,
+    backgroundColor: '#f8f8f8',
+  },
+  modelData: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  modelColumn: {
+    flex: 1,
+  },
+  modelLabel: {
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  foodRecommendation: {
+    color: '#34C759',
+    fontWeight: 'bold',
+  },
+  probabilityText: {
+    color: '#007AFF',
+    fontWeight: 'bold',
+  },
+  emptyState: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  emptyStateSubtext: {
+    color: '#666',
     textAlign: 'center',
   },
 }); 
