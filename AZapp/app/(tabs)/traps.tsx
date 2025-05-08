@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, ScrollView, View, Modal, TouchableOpacity, TextInput, ActivityIndicator, Pressable, Switch } from 'react-native';
+import { StyleSheet, ScrollView, View, Modal, TouchableOpacity, TextInput, ActivityIndicator, Pressable, Switch, Image, Linking } from 'react-native';
 import { Text } from '../../components/Themed';
 import UserProfileCard from '../../components/UserProfileCard';
 import { useState, useEffect } from 'react';
@@ -30,6 +30,8 @@ interface Station {
   group_station_number: number;
   station_name: string;
   last_reading?: SensorReading;
+  food_recommendation?: string;
+  mouse_probability?: number;
 }
 
 interface Group {
@@ -51,6 +53,7 @@ export default function TrapsScreen() {
   const [isEditingGroup, setIsEditingGroup] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [seenStations, setSeenStations] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     fetchData();
@@ -82,6 +85,18 @@ export default function TrapsScreen() {
         }
       });
 
+      // Create a map of station_id to latest model output
+      const latestModelOutputs = new Map<number, { food_recommendation: string; mouse_probability: number }>();
+      data.data.model_outputs.forEach((output: any) => {
+        const currentLatest = latestModelOutputs.get(output.station_id);
+        if (!currentLatest || new Date(output.timestamp) > new Date(currentLatest.timestamp)) {
+          latestModelOutputs.set(output.station_id, {
+            food_recommendation: output.food_recommendation,
+            mouse_probability: output.mouse_probability
+          });
+        }
+      });
+
       // Transform API data into our group structure
       const transformedGroups: Group[] = [];
       const stationsMap = new Map<number, Station[]>();
@@ -90,6 +105,13 @@ export default function TrapsScreen() {
       data.data.stations.forEach((station: Station) => {
         // Add the latest reading to the station
         station.last_reading = latestReadings.get(station.station_id);
+        
+        // Add the latest model output to the station
+        const modelOutput = latestModelOutputs.get(station.station_id);
+        if (modelOutput) {
+          station.food_recommendation = modelOutput.food_recommendation;
+          station.mouse_probability = modelOutput.mouse_probability;
+        }
         
         if (!stationsMap.has(station.group_id)) {
           stationsMap.set(station.group_id, []);
@@ -118,6 +140,7 @@ export default function TrapsScreen() {
 
   const getStationStatus = (station: Station): 'active' | 'triggered' | 'inactive' => {
     if (!station.last_reading) return 'inactive';
+    if (seenStations.has(station.station_id)) return 'active';
     if (station.last_reading.mouse_present === 1) return 'triggered';
     return 'active';
   };
@@ -168,6 +191,8 @@ export default function TrapsScreen() {
     setSelectedStation(station);
     setStationName(station.station_name);
     setIsModalVisible(true);
+    // Refresh data after viewing station
+    fetchData();
   };
 
   const handleSaveStation = () => {
@@ -191,11 +216,31 @@ export default function TrapsScreen() {
     }
   };
 
+  const handleMarkAsSeen = (stationId: number) => {
+    setSeenStations(prev => new Set(prev).add(stationId));
+  };
+
+  const handleAsazistPress = () => {
+    Linking.openURL('https://asazist.com');
+  };
+
   const StationDetails = ({ station }: { station: Station }) => {
     const { theme } = useTheme();
     const styles = createStyles(theme);
+    const isSeen = seenStations.has(station.station_id);
 
     const lastReading = station.last_reading;
+    
+    // Create display reading that resets status when seen
+    const displayReading = lastReading ? {
+      ...lastReading,
+      bait1_touched: isSeen ? 0 : lastReading.bait1_touched,
+      bait2_touched: isSeen ? 0 : lastReading.bait2_touched,
+      mouse_present: isSeen ? 0 : lastReading.mouse_present
+    } : null;
+
+    // Get display status based on seen state
+    const displayStatus = isSeen ? 'active' : getStationStatus(station);
     
     return (
       <View style={styles.stationDetailsContainer}>
@@ -204,31 +249,41 @@ export default function TrapsScreen() {
             <Text style={styles.stationTitle}>Station {station.global_station_number}</Text>
             <Text style={styles.stationSubtitle}>Group {station.group_id}</Text>
           </View>
-          <View style={[
-            styles.statusBadge,
-            { backgroundColor: theme.status[getStationStatus(station)] }
-          ]}>
-            <Text style={styles.statusText}>{getStationStatus(station).toUpperCase()}</Text>
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={fetchData} style={styles.refreshButton}>
+              <Ionicons name="refresh" size={20} color={theme.primary} />
+            </TouchableOpacity>
+            {!isSeen && (
+              <TouchableOpacity 
+                onPress={() => handleMarkAsSeen(station.station_id)} 
+                style={styles.seenButton}
+              >
+                <Text style={styles.seenButtonText}>Seen</Text>
+              </TouchableOpacity>
+            )}
+            <View style={[
+              styles.statusBadge,
+              { backgroundColor: theme.status[displayStatus] }
+            ]}>
+              <Text style={styles.statusText}>{displayStatus.toUpperCase()}</Text>
+            </View>
           </View>
         </View>
         
-        {lastReading ? (
+        {displayReading ? (
           <View style={styles.readingsContainer}>
             <View style={styles.readingsGrid}>
               <View style={styles.readingCard}>
-                <Ionicons name="thermometer" size={24} color={theme.primary} />
-                <Text style={styles.readingValue}>{lastReading.calibrated_temperature?.toFixed(1) ?? 'N/A'}°C</Text>
+                <Text style={styles.readingValue}>{displayReading.calibrated_temperature.toFixed(1)}°C</Text>
                 <Text style={styles.readingLabel}>Temperature</Text>
               </View>
               <View style={styles.readingCard}>
-                <Ionicons name="water" size={24} color={theme.primary} />
-                <Text style={styles.readingValue}>{lastReading.calibrated_humidity?.toFixed(1) ?? 'N/A'}%</Text>
+                <Text style={styles.readingValue}>{displayReading.calibrated_humidity.toFixed(1)}%</Text>
                 <Text style={styles.readingLabel}>Humidity</Text>
               </View>
               <View style={styles.readingCard}>
-                <Ionicons name="scale" size={24} color={theme.primary} />
-                <Text style={styles.readingValue}>{lastReading.mouse_weight?.toFixed(1) ?? 'N/A'}g</Text>
-                <Text style={styles.readingLabel}>Weight</Text>
+                <Text style={styles.readingValue}>{displayReading.mouse_weight.toFixed(1)}g</Text>
+                <Text style={styles.readingLabel}>Mouse Weight</Text>
               </View>
             </View>
 
@@ -237,38 +292,39 @@ export default function TrapsScreen() {
               <View style={styles.baitContainer}>
                 <View style={styles.baitItem}>
                   <Ionicons 
-                    name={lastReading.bait1_touched ? "checkmark-circle" : "close-circle"} 
+                    name={displayReading.bait1_touched ? "checkmark-circle" : "close-circle"} 
                     size={20} 
-                    color={lastReading.bait1_touched ? theme.status.triggered : theme.status.active} 
+                    color={displayReading.bait1_touched ? theme.status.active : theme.status.triggered} 
                   />
-                  <Text style={[
-                    styles.baitStatus,
-                    { color: lastReading.bait1_touched ? theme.status.triggered : theme.status.active }
-                  ]}>
-                    Bait 1: {lastReading.bait1_touched ? 'Touched' : 'Untouched'}
-                  </Text>
+                  <Text style={styles.baitStatus}>Bait 1: {displayReading.bait1_touched ? "Touched" : "Untouched"}</Text>
                 </View>
                 <View style={styles.baitItem}>
                   <Ionicons 
-                    name={lastReading.bait2_touched ? "checkmark-circle" : "close-circle"} 
+                    name={displayReading.bait2_touched ? "checkmark-circle" : "close-circle"} 
                     size={20} 
-                    color={lastReading.bait2_touched ? theme.status.triggered : theme.status.active} 
+                    color={displayReading.bait2_touched ? theme.status.active : theme.status.triggered} 
                   />
-                  <Text style={[
-                    styles.baitStatus,
-                    { color: lastReading.bait2_touched ? theme.status.triggered : theme.status.active }
-                  ]}>
-                    Bait 2: {lastReading.bait2_touched ? 'Touched' : 'Untouched'}
-                  </Text>
+                  <Text style={styles.baitStatus}>Bait 2: {displayReading.bait2_touched ? "Touched" : "Untouched"}</Text>
                 </View>
               </View>
             </View>
 
-            <View style={styles.timestampContainer}>
-              <Ionicons name="time" size={16} color={theme.secondaryText} />
-              <Text style={styles.timestamp}>
-                Last updated: {new Date(lastReading.timestamp).toLocaleString()}
-              </Text>
+            <View style={styles.modelSection}>
+              <Text style={styles.sectionTitle}>Model Predictions</Text>
+              <View style={styles.modelContainer}>
+                <View style={styles.modelItem}>
+                  <Ionicons name="pizza" size={20} color={theme.primary} />
+                  <Text style={styles.modelText}>
+                    Food Recommendation: {station.food_recommendation || 'N/A'}
+                  </Text>
+                </View>
+                <View style={styles.modelItem}>
+                  <Ionicons name="pulse" size={20} color={theme.primary} />
+                  <Text style={styles.modelText}>
+                    Mouse Probability: {station.mouse_probability ? `${(station.mouse_probability * 100).toFixed(1)}%` : 'N/A'}
+                  </Text>
+                </View>
+              </View>
             </View>
           </View>
         ) : (
@@ -306,18 +362,23 @@ export default function TrapsScreen() {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.headerContainer}>
-      <UserProfileCard 
-        userName="Reza Saber"
-        userEmail="rexa.saber1358@gmail.com"
-          activeTraps={groups.reduce((sum, group) => sum + group.stations.length, 0)}
-          catches={0}
-          efficiency={0}
-        />
+        <TouchableOpacity 
+          style={styles.logoSection}
+          onPress={handleAsazistPress}
+        >
+          <Image 
+            source={require('../../assets/images/logoicon.png')} 
+            style={styles.logo}
+          />
+          <Text style={styles.brandText}>Asazist</Text>
+        </TouchableOpacity>
       </View>
       
       <View style={styles.groupsContainer}>
         <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Groups</Text>
+          <View style={styles.sectionTitleContainer}>
+            <Text style={styles.sectionTitle}>Groups</Text>
+          </View>
           <Text style={styles.sectionSubtitle}>{groups.length} groups • {groups.reduce((sum, group) => sum + group.stations.length, 0)} stations</Text>
         </View>
         <View style={styles.gridContainer}>
@@ -461,38 +522,39 @@ export default function TrapsScreen() {
 const createStyles = (theme: Theme) => StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
+    padding: 12,
     backgroundColor: theme.background,
   },
   headerContainer: {
-    backgroundColor: 'rgba(0, 100, 255, 0.05)',
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 20,
+    backgroundColor: theme.background,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
     shadowColor: '#0064FF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
     borderWidth: 1,
     borderColor: 'rgba(0, 100, 255, 0.1)',
-  },
-  headerContent: {
-    flexDirection: 'column',
-    gap: 16,
-  },
-  titleContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: theme.text,
-    textShadowColor: 'rgba(0, 100, 255, 0.2)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+  logoSection: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logo: {
+    width: 56,
+    height: 56,
+    marginBottom: 8,
+  },
+  brandText: {
+    fontSize: 22,
+    fontWeight: '600',
+    color: theme.primary,
+    letterSpacing: 0.5,
+    textAlign: 'center',
   },
   infoButton: {
     padding: 8,
@@ -524,50 +586,63 @@ const createStyles = (theme: Theme) => StyleSheet.create({
   },
   groupsContainer: {
     marginTop: 24,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0, 100, 255, 0.05)',
-    padding: 16,
+    borderRadius: 16,
+    backgroundColor: theme.background,
+    padding: 12,
     shadowColor: '#0064FF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
     borderWidth: 1,
     borderColor: 'rgba(0, 100, 255, 0.1)',
   },
   sectionHeader: {
     marginBottom: 20,
   },
+  sectionTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  sectionLogo: {
+    width: 24,
+    height: 24,
+    marginRight: 8,
+  },
   sectionTitle: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '700',
     color: theme.text,
     marginBottom: 4,
+    textAlign: 'left',
     textShadowColor: 'rgba(0, 100, 255, 0.3)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
+    textShadowRadius: 8,
   },
   sectionSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: theme.secondaryText,
+    textAlign: 'left',
+    marginLeft: 32,
   },
   gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
   },
   groupCard: {
-    backgroundColor: theme.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    width: '31%',
+    backgroundColor: theme.background,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    width: '48%',
     shadowColor: '#0064FF',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: 4,
     borderWidth: 1,
     borderColor: 'rgba(0, 100, 255, 0.1)',
   },
@@ -603,10 +678,12 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     fontWeight: '500',
   },
   groupName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: theme.text,
-    marginBottom: 8,
+    marginBottom: 6,
+    textAlign: 'left',
+    paddingRight: 4,
   },
   stationSummary: {
     flexDirection: 'column',
@@ -618,8 +695,9 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     gap: 4,
   },
   stationCount: {
-    fontSize: 12,
+    fontSize: 11,
     color: theme.secondaryText,
+    textAlign: 'left',
   },
   statusContainer: {
     flexDirection: 'row',
@@ -642,11 +720,18 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: theme.card,
+    backgroundColor: theme.background,
     borderRadius: 16,
-    padding: 20,
-    width: '90%',
-    maxHeight: '80%',
+    padding: 16,
+    width: '95%',
+    maxHeight: '85%',
+    shadowColor: '#0064FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 100, 255, 0.1)',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -673,7 +758,7 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     color: theme.text,
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '600',
     color: theme.text,
   },
@@ -748,16 +833,18 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     fontWeight: 'bold',
   },
   stationDetailsContainer: {
-    padding: 16,
-    backgroundColor: theme.card,
+    padding: 12,
+    backgroundColor: theme.background,
     borderRadius: 12,
     marginBottom: 8,
     width: '100%',
-    shadowColor: theme.shadowColor,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowColor: '#0064FF',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 100, 255, 0.1)',
   },
   stationHeader: {
     flexDirection: 'row',
@@ -772,14 +859,16 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     flex: 1,
   },
   stationTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '600',
     color: theme.text,
-    marginBottom: 4,
+    marginBottom: 2,
+    textAlign: 'left',
   },
   stationSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: theme.secondaryText,
+    textAlign: 'left',
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -789,8 +878,9 @@ const createStyles = (theme: Theme) => StyleSheet.create({
   },
   statusText: {
     color: theme.text,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
+    textAlign: 'center',
   },
   readingsContainer: {
     marginTop: 8,
@@ -809,14 +899,16 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     marginHorizontal: 4,
   },
   readingValue: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: theme.text,
-    marginVertical: 4,
+    marginVertical: 2,
+    textAlign: 'center',
   },
   readingLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: theme.secondaryText,
+    textAlign: 'center',
   },
   baitSection: {
     marginBottom: 16,
@@ -831,8 +923,10 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     gap: 8,
   },
   baitStatus: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 13,
+    color: theme.text,
+    textAlign: 'left',
+    marginLeft: 4,
   },
   timestampContainer: {
     flexDirection: 'row',
@@ -865,5 +959,48 @@ const createStyles = (theme: Theme) => StyleSheet.create({
     padding: 20,
     width: '90%',
     maxHeight: '80%',
+  },
+  modelSection: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: theme.cardBackground,
+    borderRadius: 8,
+  },
+  modelContainer: {
+    marginTop: 8,
+  },
+  modelItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modelText: {
+    fontSize: 13,
+    color: theme.text,
+    textAlign: 'left',
+    marginLeft: 8,
+    flex: 1,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  refreshButton: {
+    padding: 4,
+    borderRadius: 20,
+    backgroundColor: theme.background,
+  },
+  seenButton: {
+    backgroundColor: theme.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginRight: 8,
+  },
+  seenButtonText: {
+    color: theme.background,
+    fontSize: 12,
+    fontWeight: '600',
   },
 }); 

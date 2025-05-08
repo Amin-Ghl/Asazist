@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ScrollView, RefreshControl, TouchableOpacity, Dimensions, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, ScrollView, RefreshControl, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { Text } from '../../components/Themed';
 import { getDatabaseData } from '../../api/database';
 import { API_CONFIG } from '../../constants/config';
-import { LineChart, PieChart, BarChart, ProgressChart } from 'react-native-chart-kit';
+import { LineChart, PieChart, BarChart } from 'react-native-chart-kit';
 import { useTheme } from '../../contexts/ThemeContext';
 import { lightTheme, darkTheme } from '../../constants/Theme';
 
@@ -53,6 +53,12 @@ export default function StatisticsScreen() {
 
   useEffect(() => {
     fetchData();
+    
+    // Set up automatic refresh every 5 minutes
+    const intervalId = setInterval(fetchData, 5 * 60 * 1000);
+    
+    // Clean up interval on component unmount
+    return () => clearInterval(intervalId);
   }, []);
 
   const fetchData = async () => {
@@ -78,77 +84,187 @@ export default function StatisticsScreen() {
     fetchData();
   };
 
+  const chartConfig = {
+    backgroundGradientFrom: theme.card,
+    backgroundGradientTo: theme.card,
+    color: (opacity = 1) => `rgba(${isDarkMode ? '255, 255, 255' : '0, 0, 0'}, ${opacity})`,
+    strokeWidth: 2,
+    barPercentage: 0.5,
+    useShadowColorFromDataset: false,
+    propsForLabels: {
+      fontSize: 12,
+    },
+    propsForDots: {
+      r: "4",
+      strokeWidth: "2",
+    },
+    decimalPlaces: 1,
+    formatYLabel: (value: string) => parseFloat(value).toFixed(1),
+    style: {
+      borderRadius: 16,
+    },
+    paddingRight: 20,
+    paddingTop: 20,
+    paddingBottom: 20,
+  };
+
   const processTemperatureData = () => {
     if (!data?.sensor_readings || data.sensor_readings.length === 0) return null;
     
-    const sortedReadings = [...data.sensor_readings]
-      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-      .slice(-12); // Last 12 readings
+    // Get readings from the last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const lastMonthReadings = data.sensor_readings.filter(reading => 
+      new Date(reading.timestamp) >= thirtyDaysAgo
+    );
+
+    // Group readings by date and calculate daily averages
+    const dailyAverages = lastMonthReadings.reduce((acc, reading) => {
+      const date = new Date(reading.timestamp).toISOString().split('T')[0]; // YYYY-MM-DD
+      if (!acc[date]) {
+        acc[date] = { sum: 0, count: 0 };
+      }
+      acc[date].sum += reading.calibrated_temperature;
+      acc[date].count += 1;
+      return acc;
+    }, {} as Record<string, { sum: number; count: number }>);
+
+    // Convert to array of averages and sort by date
+    const averages = Object.entries(dailyAverages)
+      .map(([date, { sum, count }]) => ({
+        date,
+        average: sum / count
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    
+    // Only show every third date to prevent overcrowding
+    const filteredAverages = averages.filter((_, index) => index % 3 === 0);
     
     return {
-      labels: sortedReadings.map(r => new Date(r.timestamp).getHours() + ':00'),
+      labels: filteredAverages.map(a => a.date.split('-').slice(1).join('/')), // MM/DD format
       datasets: [{
-        data: sortedReadings.map(r => r.calibrated_temperature),
+        data: filteredAverages.map(a => Number(a.average.toFixed(1))),
         color: () => theme.primary,
         strokeWidth: 2
       }],
-      legend: ['Temperature (°C)']
+      legend: ['Average Temperature (°C)']
     };
   };
 
   const processHumidityData = () => {
     if (!data?.sensor_readings || data.sensor_readings.length === 0) return null;
     
-    const sortedReadings = [...data.sensor_readings]
-      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-      .slice(-12); // Last 12 readings
+    // Get readings from the last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const lastMonthReadings = data.sensor_readings.filter(reading => 
+      new Date(reading.timestamp) >= thirtyDaysAgo
+    );
+
+    // Group readings by date and calculate daily averages
+    const dailyAverages = lastMonthReadings.reduce((acc, reading) => {
+      const date = new Date(reading.timestamp).toISOString().split('T')[0]; // YYYY-MM-DD
+      if (!acc[date]) {
+        acc[date] = { sum: 0, count: 0 };
+      }
+      acc[date].sum += reading.calibrated_humidity;
+      acc[date].count += 1;
+      return acc;
+    }, {} as Record<string, { sum: number; count: number }>);
+
+    // Convert to array of averages and sort by date
+    const averages = Object.entries(dailyAverages)
+      .map(([date, { sum, count }]) => ({
+        date,
+        average: sum / count
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    
+    // Only show every third date to prevent overcrowding
+    const filteredAverages = averages.filter((_, index) => index % 3 === 0);
     
     return {
-      labels: sortedReadings.map(r => new Date(r.timestamp).getHours() + ':00'),
+      labels: filteredAverages.map(a => a.date.split('-').slice(1).join('/')), // MM/DD format
       datasets: [{
-        data: sortedReadings.map(r => r.calibrated_humidity),
+        data: filteredAverages.map(a => Number(a.average.toFixed(1))),
         color: () => theme.secondary,
         strokeWidth: 2
       }],
-      legend: ['Humidity (%)']
+      legend: ['Average Humidity (%)']
     };
   };
 
   const processMouseActivity = () => {
     if (!data?.sensor_readings || data.sensor_readings.length === 0) return [];
     
-    const total = data.sensor_readings.length;
-    const mousePresent = data.sensor_readings.filter(r => r.mouse_present === 1).length;
-    
-    return [
-      {
-        name: 'Mouse Detected',
-        population: mousePresent,
-        color: theme.status.triggered,
-        legendFontColor: theme.text,
-      },
-      {
-        name: 'No Activity',
-        population: total - mousePresent,
-        color: theme.status.active,
-        legendFontColor: theme.text,
+    // Since data only comes in when mice touch traps, we can analyze the patterns
+    const activityByDay = data.sensor_readings.reduce((acc, reading) => {
+      const day = new Date(reading.timestamp).getDay();
+      if (!acc[day]) {
+        acc[day] = { count: 0 };
       }
+      acc[day].count += 1;
+      return acc;
+    }, {} as Record<number, { count: number }>);
+
+    // Calculate total readings
+    const totalReadings = data.sensor_readings.length;
+    
+    // Define distinct colors for each day
+    const dayColors = [
+      '#FF6B6B', // Sunday - Red
+      '#4ECDC4', // Monday - Teal
+      '#45B7D1', // Tuesday - Blue
+      '#96CEB4', // Wednesday - Green
+      '#FFEEAD', // Thursday - Yellow
+      '#D4A5A5', // Friday - Pink
+      '#9B59B6', // Saturday - Purple
     ];
+    
+    // Calculate distribution by day of week
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const distribution = days.map((dayName, dayIndex) => {
+      const count = activityByDay[dayIndex]?.count || 0;
+      const percentage = (count / totalReadings) * 100;
+      return {
+        name: `% ${dayName} `,
+        population: Number(percentage.toFixed(1)),
+        color: dayColors[dayIndex],
+        legendFontColor: theme.text,
+      };
+    });
+    
+    return distribution;
   };
 
   const processBaitData = () => {
     if (!data?.sensor_readings || data.sensor_readings.length === 0) return null;
     
+    // Calculate bait effectiveness by day of week
+    const baitByDay = data.sensor_readings.reduce((acc, reading) => {
+      const day = new Date(reading.timestamp).getDay();
+      if (!acc[day]) {
+        acc[day] = { total: 0, bait1: 0, bait2: 0 };
+      }
+      acc[day].total += 1;
+      if (reading.bait1_touched === 1) acc[day].bait1 += 1;
+      if (reading.bait2_touched === 1) acc[day].bait2 += 1;
+      return acc;
+    }, {} as Record<number, { total: number; bait1: number; bait2: number }>);
+
+    // Calculate overall averages
+    const totalReadings = data.sensor_readings.length;
     const bait1Touched = data.sensor_readings.filter(r => r.bait1_touched === 1).length;
     const bait2Touched = data.sensor_readings.filter(r => r.bait2_touched === 1).length;
-    const total = data.sensor_readings.length;
     
     return {
       labels: ['Bait 1', 'Bait 2'],
       datasets: [{
         data: [
-          (bait1Touched / total) * 100,
-          (bait2Touched / total) * 100,
+          Number(((bait1Touched / totalReadings) * 100).toFixed(1)),
+          Number(((bait2Touched / totalReadings) * 100).toFixed(1)),
         ],
         colors: [
           (opacity = 1) => theme.primary,
@@ -158,49 +274,10 @@ export default function StatisticsScreen() {
     };
   };
 
-  const processStationActivity = () => {
-    if (!data?.stations || data.stations.length === 0) return { data: [0] };
-    
-    const activeStations = data.stations.filter(s => 
-      data.sensor_readings?.some(r => 
-        r.station_id === s.station_id && 
-        new Date(r.timestamp).getTime() > Date.now() - 24 * 60 * 60 * 1000
-      )
-    ).length;
-    
-    return {
-      data: [activeStations / data.stations.length]
-    };
-  };
-
-  const chartConfig = {
-    backgroundGradientFrom: theme.card,
-    backgroundGradientTo: theme.card,
-    color: (opacity = 1) => `rgba(${isDarkMode ? '255, 255, 255' : '0, 0, 0'}, ${opacity})`,
-    strokeWidth: 2,
-    barPercentage: 0.5,
-    useShadowColorFromDataset: false,
-    propsForLabels: {
-      fontSize: 10,
-    },
-    propsForDots: {
-      r: "4",
-      strokeWidth: "2",
-    },
-    decimalPlaces: 1,
-    style: {
-      borderRadius: 16,
-    },
-    paddingRight: 20,
-    paddingTop: 20,
-    paddingBottom: 20,
-  };
-
   const temperatureData = processTemperatureData();
   const humidityData = processHumidityData();
   const mouseActivityData = processMouseActivity();
   const baitData = processBaitData();
-  const stationActivityData = processStationActivity();
 
   return (
     <ScrollView 
@@ -226,7 +303,7 @@ export default function StatisticsScreen() {
                   <LineChart
                     data={temperatureData}
                     width={width - 56}
-                    height={220}
+                    height={280}
                     chartConfig={{
                       ...chartConfig,
                       color: (opacity = 1) => `rgba(0, 100, 255, ${opacity})`,
@@ -257,7 +334,7 @@ export default function StatisticsScreen() {
                   <LineChart
                     data={humidityData}
                     width={width - 56}
-                    height={220}
+                    height={280}
                     chartConfig={{
                       ...chartConfig,
                       color: (opacity = 1) => `rgba(74, 144, 226, ${opacity})`,
@@ -283,19 +360,20 @@ export default function StatisticsScreen() {
           {data?.sensor_readings && data.sensor_readings.length > 0 && (
             <View style={[styles.card, { backgroundColor: theme.card }]}>
               <Text style={[styles.cardTitle, { color: theme.text }]}>Mouse Activity Distribution</Text>
-              <View style={styles.chartContainer}>
-                <PieChart
-                  data={mouseActivityData}
-                  width={width - 56}
-                  height={220}
-                  chartConfig={chartConfig}
-                  accessor="population"
-                  backgroundColor="transparent"
-                  paddingLeft="15"
-                  style={styles.chart}
-                  center={[0, 0]}
-                  absolute
-                />
+              <View style={styles.pieChartContainer}>
+                {mouseActivityData.length > 0 && (
+                  <PieChart
+                    data={mouseActivityData}
+                    width={width - 56}
+                    height={220}
+                    chartConfig={chartConfig}
+                    accessor="population"
+                    backgroundColor="transparent"
+                    paddingLeft="15"
+                    absolute
+                    style={styles.chart}
+                  />
+                )}
               </View>
             </View>
           )}
@@ -312,7 +390,8 @@ export default function StatisticsScreen() {
                     chartConfig={{
                       ...chartConfig,
                       barPercentage: 0.7,
-                      decimalPlaces: 0,
+                      decimalPlaces: 1,
+                      formatYLabel: (value: string) => parseFloat(value).toFixed(1),
                       fillShadowGradient: theme.primary,
                       fillShadowGradientOpacity: 0.3,
                       propsForLabels: {
@@ -339,45 +418,7 @@ export default function StatisticsScreen() {
             </View>
           )}
 
-          {data?.stations && data.stations.length > 0 && (
-            <View style={[styles.card, { backgroundColor: theme.card }]}>
-              <Text style={[styles.cardTitle, { color: theme.text }]}>Station Activity (24h)</Text>
-              <View style={styles.chartContainer}>
-                <ProgressChart
-                  data={stationActivityData}
-                  width={width - 56}
-                  height={220}
-                  chartConfig={chartConfig}
-                  style={styles.chart}
-                  hideLegend={false}
-                />
-              </View>
-            </View>
-          )}
-
-          {data?.model_outputs && data.model_outputs.length > 0 && (
-            <View style={[styles.card, { backgroundColor: theme.card }]}>
-              <Text style={[styles.cardTitle, { color: theme.text }]}>Latest Model Predictions</Text>
-              {data.model_outputs.slice(0, 5).map((output, index) => (
-                <View key={index} style={styles.predictionItem}>
-                  <Text style={[styles.stationText, { color: theme.text }]}>
-                    Station {output.station_id}
-                  </Text>
-                  <Text style={[styles.recommendationText, { color: theme.primary }]}>
-                    {output.food_recommendation || 'No recommendation'}
-                  </Text>
-                  <Text style={[styles.probabilityText, { color: theme.secondary }]}>
-                    {(output.mouse_probability * 100).toFixed(1)}% probability
-                  </Text>
-                  <Text style={[styles.timestampText, { color: theme.secondaryText }]}>
-                    {new Date(output.timestamp).toLocaleString()}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {(!data?.sensor_readings || data.sensor_readings.length === 0) && (!data?.model_outputs || data.model_outputs.length === 0) && (
+          {(!data?.sensor_readings || data.sensor_readings.length === 0) && (
             <View style={styles.emptyState}>
               <Text style={[styles.emptyStateText, { color: theme.secondaryText }]}>
                 No data available. Pull to refresh or check your connection.
@@ -393,74 +434,55 @@ export default function StatisticsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
   },
   card: {
-    borderRadius: 12,
+    margin: 16,
     padding: 16,
-    marginBottom: 16,
+    borderRadius: 12,
+    elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 2,
-    overflow: 'hidden',
   },
   cardTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: 'bold',
     marginBottom: 16,
+  },
+  chartContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 8,
   },
   chart: {
     marginVertical: 8,
     borderRadius: 16,
-    overflow: 'hidden',
   },
-  chartContainer: {
-    width: '100%',
+  pieChartContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    width: '100%',
+    height: 220,
   },
   errorContainer: {
-    padding: 20,
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
   errorText: {
     fontSize: 16,
-    marginBottom: 16,
+    marginBottom: 10,
   },
   retryButton: {
-    backgroundColor: '#0064FF',
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 5,
   },
   retryButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  predictionItem: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
-  },
-  stationText: {
+    color: 'white',
     fontSize: 16,
-    fontWeight: '600',
-  },
-  recommendationText: {
-    fontSize: 14,
-    marginTop: 4,
-  },
-  probabilityText: {
-    fontSize: 14,
-    marginTop: 4,
-  },
-  timestampText: {
-    fontSize: 12,
-    marginTop: 4,
   },
   emptyState: {
     padding: 20,
